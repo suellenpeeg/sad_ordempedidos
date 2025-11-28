@@ -70,10 +70,10 @@ def gerar_pdf(pedidos):
 
     for _, row in pedidos.iterrows():
         texto = (
-            f"Pedido: {row['Pedido']} | Produto: {row['Produto']} | "
-            f"Urgência: {row['Urgência']} | Custo: R${row['Custo(R$)']:.2f} | "
-            f"Tempo: {row['Tempo Produção']}h | Prazo: {row['Prazo'].strftime('%d/%m/%Y')}"
-        )
+       f"Pedido: {row['Pedido']} | Produto: {row['Produto']} | "
+       f"Urgência: {row['Urgência']} | Custo: R${row['Custo(R$)']:.2f} | "
+       f"Tempo: {row['Tempo Produção']}h | Prazo: {prazo_str}"
+       )
         pdf.multi_cell(0, 8, txt=texto)
         pdf.ln(2)
 
@@ -261,6 +261,7 @@ with aba3:
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
 
