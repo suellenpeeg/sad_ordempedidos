@@ -212,7 +212,7 @@ with aba3:
     if pedidos.empty:
         st.info("Nenhum pedido cadastrado ainda.")
     else:
-        hoje = datetime.today().date()
+        hoje = datetime.today()
         pedidos["Prazo"] = pd.to_datetime(pedidos["Prazo"])
 
         pedidos["Atrasado"] = (pedidos["Status"] == "Aberto") & (pedidos["Prazo"] < hoje)
@@ -251,6 +251,7 @@ with aba3:
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
 
