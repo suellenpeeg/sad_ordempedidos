@@ -174,6 +174,7 @@ with aba2:
             }])
             st.session_state.produtos = pd.concat([st.session_state.produtos, novo_prod], ignore_index=True)
             st.success("Produto cadastrado!")
+            st.rerun()
 
     st.subheader("📄 Produtos cadastrados")
     st.dataframe(st.session_state.produtos)
@@ -250,6 +251,7 @@ with aba3:
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
 
