@@ -238,9 +238,14 @@ with aba3:
         # Tempo entre entrada e conclusão
         concluídos = pedidos[pedidos["Status"] == "Concluído"].copy()
         if not concluídos.empty:
-            concluídos["Dias"] = (
-                concluídos["Data Conclusão"] - concluídos["Data Entrada"]
-            ).dt.days
+           # Garantir que ambos são datetime
+        concluídos["Data Entrada"] = pd.to_datetime(concluídos["Data Entrada"], errors="coerce")
+        concluídos["Data Conclusão"] = pd.to_datetime(concluídos["Data Conclusão"], errors="coerce")
+
+        # Agora pode subtrair
+         concluídos["Dias"] = (
+         concluídos["Data Conclusão"] - concluídos["Data Entrada"]
+         ).dt.days
 
             st.subheader("⏱ Tempo total para concluir cada pedido (dias)")
             fig2 = px.bar(
@@ -251,6 +256,7 @@ with aba3:
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
 
