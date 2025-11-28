@@ -4,159 +4,441 @@ from datetime import datetime, timedelta
 import plotly.express as px
 from fpdf import FPDF
 
-# --- Configuração da Página ---
+# =========================================
+# CONFIGURAÇÃO DA PÁGINA
+# =========================================
 st.set_page_config(
-    page_title="SAD Fábrica de Tecidos",
+    page_title="SAD - Sistema de Priorizaçã de Pedidos",
     layout="wide"
 )
 
-st.title("SAD Fábrica de Tecidos - Gestão e Prioridade de Pedidos")
+# Paleta de cores azul e vermelha
+PRIMARY_COLOR = "#0A3D91"
+SECOND_COLOR = "#E53935"
 
-# --------------------------
-# Controle de acesso
-# --------------------------
-st.sidebar.header("Login")
-usuario = st.sidebar.text_input("Usuário")
-senha = st.sidebar.text_input("Senha", type="password")
+st.markdown(
+    f"""
+    <style>
+        .sidebar .sidebar-content {{
+            background-color: {PRIMARY_COLOR};
+        }}
+        .stButton>button {{
+            background-color:{SECOND_COLOR};
+            color: white;
+            font-weight:bold;
+            border-radius:5px;
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-# Usuários e datas de acesso
-usuarios_validos = {
-    "admin": {"senha": "1234", "acesso_ate": datetime(2025, 12, 31)},
-    "usuario1": {"senha": "abcd", "acesso_ate": datetime(2025, 11, 30)}
-}
+st.title("📊 SAD Fábrica de Tecidos – Gestão e Priorização")
 
-acesso_autorizado = False
-if usuario in usuarios_validos:
-    if senha == usuarios_validos[usuario]["senha"]:
-        if datetime.today() <= usuarios_validos[usuario]["acesso_ate"]:
-            acesso_autorizado = True
-        else:
-            st.sidebar.error("⛔ Acesso expirado para este usuário.")
-    else:
-        st.sidebar.error("Senha incorreta.")
 
-if not acesso_autorizado:
-    st.stop()
+# =========================================
+# SESSION STATES
+# =========================================
+if "produtos" not in st.session_state:
+    st.session_state.produtos = pd.DataFrame(columns=["Produto", "Tempo"])
 
-# --------------------------
-# Configuração da capacidade da fábrica
-# --------------------------
-NUM_MAQUINAS = 5
-HORAS_POR_DIA = 8
-DIAS_POR_SEMANA = 5
-CAPACIDADE_SEMANAL = NUM_MAQUINAS * HORAS_POR_DIA * DIAS_POR_SEMANA  # 200 horas
-
-# --------------------------
-# Dados dos produtos e tempo de produção (horas)
-# --------------------------
-tempo_producao_produto = {
-    "Camiseta de Malha": 2,
-    "Camiseta UV": 3,
-    "Shorts de Malha": 2,
-    "Calças de Malha": 4
-}
-
-# --------------------------
-# Session State para pedidos
-# --------------------------
 if "pedidos" not in st.session_state:
     st.session_state.pedidos = pd.DataFrame(columns=[
-        "Pedido", "Produto", "Urgência", "Custo", "Tempo de Produção", "Pontuação", "Prazo", "Status"
+        "Pedido", "Produto", "Urgência", "Custo(R$)", "Tempo Produção",
+        "Pontuação", "Prazo", "Data Entrada", "Data Conclusão", "Status"
     ])
 
-# --------------------------
-# Formulário para adicionar pedido
-# --------------------------
-st.sidebar.header("Adicionar Novo Pedido")
-with st.sidebar.form("form_novo_pedido", clear_on_submit=True):
-    nome = st.text_input("Nome do Pedido")
-    produto = st.selectbox("Tipo de Produto", list(tempo_producao_produto.keys()))
-    urgencia = st.slider("Urgência (1-10)", 1, 10, 5)
-    custo = st.slider("Custo (1-10)", 1, 10, 5)
-    prazo = st.date_input("Prazo de entrega", datetime.today() + timedelta(days=7))
-    submit = st.form_submit_button("Adicionar Pedido")
-    
-    if submit and nome:
-        tempo = tempo_producao_produto[produto]
-        # Pontuação ponderada: urgência (40%), tempo de produção (30%), custo (30%)
-        pontuacao = (urgencia*0.4 + (10 - tempo)*0.3 + (10 - custo)*0.3)
-        novo_pedido = pd.DataFrame([{
-            "Pedido": nome,
-            "Produto": produto,
-            "Urgência": urgencia,
-            "Custo": custo,
-            "Tempo de Produção": tempo,
-            "Pontuação": pontuacao,
-            "Prazo": prazo,
-            "Status": "Aberto"
-        }])
-        st.session_state.pedidos = pd.concat([st.session_state.pedidos, novo_pedido], ignore_index=True)
-        st.success(f"Pedido '{nome}' adicionado com sucesso!")
 
-# --------------------------
-# Dashboard Principal
-# --------------------------
-st.header("Dashboard de Pedidos")
+# =========================================
+# FUNÇÃO PARA GERAR PDF
+# =========================================
+def gerar_pdf(pedidos):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
 
-pedidos_abertos = st.session_state.pedidos[st.session_state.pedidos["Status"]=="Aberto"]
+    hoje = datetime.today().strftime("%d/%m/%Y")
+    pdf.cell(200, 10, txt=f"Ordem de Serviço - {hoje}", ln=True, align="C")
+    pdf.ln(10)
 
-if not pedidos_abertos.empty:
+    pdf.set_font("Arial", size=12)
+
+    for _, row in pedidos.iterrows():
+        texto = (
+            f"Pedido: {row['Pedido']} | Produto: {row['Produto']} | "
+            f"Urgência: {row['Urgência']} | Custo: R${row['Custo(R$)']:.2f} | "
+            f"Tempo: {row['Tempo Produção']}h | Prazo: {row['Prazo'].strftime('%d/%m/%Y')}"
+        )
+        pdf.multi_cell(0, 8, txt=texto)
+        pdf.ln(2)
+
+    filename = "ordem_servico.pdf"
+    pdf.output(filename)
+    return filename
+
+
+# =========================================
+# ABAS
+# =========================================
+aba1, aba2, aba3 = st.tabs([
+    "📌 Priorização de Pedidos",
+    "🧵 Cadastro de Produtos",
+    "📈 Gráficos e Indicadores"
+])
+
+
+# ============================================================
+# ██████  ABA 1 – PRIORIZAÇÃO DE PEDIDOS  ██████
+# ============================================================
+with aba1:
+    st.header("📌 Priorização de Pedidos")
+
+    with st.form("novo_pedido"):
+        st.subheader("➕ Adicionar Pedido")
+
+        nome = st.text_input("Nome do Pedido")
+        prazo = st.date_input("Prazo de entrega", datetime.today() + timedelta(days=7))
+
+        if len(st.session_state.produtos) == 0:
+            st.warning("Cadastre produtos na aba **Cadastro de Produtos**.")
+        produto = st.selectbox("Tipo de Produto", st.session_state.produtos["Produto"])
+
+        urgencia = st.slider("Urgência (1 a 10)", 1, 10, 5)
+        custo = st.number_input("Custo (R$ 0 a 2000)", 0, 2000, 500)
+
+        enviar = st.form_submit_button("Adicionar Pedido")
+
+        if enviar and nome:
+            tempo = st.session_state.produtos.loc[
+                st.session_state.produtos["Produto"] == produto, "Tempo"
+            ].iloc[0]
+
+            pontuacao = (urgencia * 0.4) + ((10 - tempo) * 0.3) + ((2000 - custo) / 2000 * 10 * 0.3)
+
+            novo = pd.DataFrame([{
+                "Pedido": nome,
+                "Produto": produto,
+                "Urgência": urgencia,
+                "Custo(R$)": custo,
+                "Tempo Produção": tempo,
+                "Pontuação": pontuacao,
+                "Prazo": prazo,
+                "Data Entrada": datetime.today(),
+                "Data Conclusão": None,
+                "Status": "Aberto"
+            }])
+
+            st.session_state.pedidos = pd.concat([st.session_state.pedidos, novo], ignore_index=True)
+            st.success("Pedido adicionado!")
+
+    # ---------- ORDENAÇÃO ----------
+    pedidos_abertos = st.session_state.pedidos[st.session_state.pedidos["Status"] == "Aberto"]
     pedidos_abertos = pedidos_abertos.sort_values(by="Pontuação", ascending=False)
 
-    # Contagem de pedidos
-    num_abertos = pedidos_abertos.shape[0]
-    num_concluidos = st.session_state.pedidos[st.session_state.pedidos["Status"]=="Concluído"].shape[0]
-    st.subheader(f"Pedidos Abertos: {num_abertos} | Pedidos Concluídos: {num_concluidos}")
-
-    # Tabela de pedidos abertos
+    st.subheader("📄 Ordem de Produção")
     st.dataframe(pedidos_abertos)
 
-    # Marcar pedidos como concluídos
-    st.subheader("Marcar Pedidos como Concluídos")
+    # ---------- MARCAR CONCLUÍDO ----------
+    st.subheader("✔ Marcar como concluído")
+
     for idx, row in pedidos_abertos.iterrows():
-        if st.checkbox(f"Concluir Pedido: {row['Pedido']}", key=f"chk_{idx}"):
+        if st.checkbox(f"Concluir pedido: {row['Pedido']}", key=f"chk_{idx}"):
             st.session_state.pedidos.at[idx, "Status"] = "Concluído"
-            st.experimental_rerun()
+            st.session_state.pedidos.at[idx, "Data Conclusão"] = datetime.today()
+            st.success(f"Pedido {row['Pedido']} concluído.")
 
-    # Gráfico de Prioridade
-    st.subheader("Gráfico de Prioridade")
-    fig1 = px.bar(pedidos_abertos, x="Pedido", y="Pontuação", color="Urgência",
-                  title="Prioridade dos Pedidos (Maior = mais urgente)")
-    st.plotly_chart(fig1)
+    # ---------- PDF ----------
+    if st.button("📥 Gerar PDF da Ordem de Serviço"):
+        pdf_path = gerar_pdf(pedidos_abertos)
+        with open(pdf_path, "rb") as f:
+            st.download_button("Download do PDF", f, file_name=pdf_path)
 
-    # Gráfico de Capacidade
-    st.subheader("Capacidade Semanal")
-    horas_totais = pedidos_abertos["Tempo de Produção"].sum()
-    df_capacidade = pd.DataFrame({
-        "Tipo": ["Horas Planejadas", "Capacidade Total"],
-        "Horas": [horas_totais, CAPACIDADE_SEMANAL]
-    })
-    fig2 = px.bar(df_capacidade, x="Tipo", y="Horas", color="Tipo", text="Horas")
-    st.plotly_chart(fig2)
 
-    # Alertas de prazo (3 dias antes)
-    st.subheader("Alertas de Prazo")
-    hoje = datetime.today().date()
-    proximos_alerta = pedidos_abertos[(pedidos_abertos["Prazo"] - timedelta(days=3)) <= hoje]
-    if not proximos_alerta.empty:
-        st.warning(f"⏰ Pedidos próximos do prazo (menos de 3 dias): {', '.join(proximos_alerta['Pedido'].tolist())}")
+# ============================================================
+# ██████  ABA 2 – CADASTRO DE PRODUTOS  ██████
+# ============================================================
+with aba2:
+    st.header("🧵 Cadastro de Produtos")
 
-    # Exportar PDF
-    st.subheader("Exportar PDF da Ordem de Produção")
-    if st.button("Gerar PDF"):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, txt="Ordem de Produção - Pedidos Abertos", ln=True, align="C")
-        pdf.ln(10)
-        for idx, row in pedidos_abertos.iterrows():
-            pdf.cell(0, 10, txt=f"Pedido: {row['Pedido']}, Produto: {row['Produto']}, Urgência: {row['Urgência']}, Tempo: {row['Tempo de Produção']}h, Custo: {row['Custo']}, Prazo: {row['Prazo']}", ln=True)
-        pdf_file = "ordem_producao.pdf"
-        pdf.output(pdf_file)
-        with open(pdf_file, "rb") as f:
-            st.download_button("Download PDF", f, file_name=pdf_file)
+    with st.form("cad_produto"):
+        st.subheader("➕ Adicionar Produto")
+        nome_prod = st.text_input("Nome do Produto")
+        tempo_prod = st.number_input("Tempo médio de produção (horas)", 1, 48, 2)
 
-else:
-    st.info("Nenhum pedido aberto no momento.")
+        add_prod = st.form_submit_button("Salvar")
 
-st.caption("SAD Profissional para fábrica de tecidos com controle de capacidade, prioridade, alertas e PDF.")
+        if add_prod and nome_prod:
+            novo_prod = pd.DataFrame([{
+                "Produto": nome_prod,
+                "Tempo": tempo_prod
+            }])
+            st.session_state.produtos = pd.concat([st.session_state.produtos, novo_prod], ignore_index=True)
+            st.success("Produto cadastrado!")
+
+    st.subheader("📄 Produtos cadastrados")
+    st.dataframe(st.session_state.produtos)
+
+    # ---------- EDIÇÃO E EXCLUSÃO ----------
+    st.subheader("✏ Editar / 🗑 Excluir Produtos")
+
+    for idx, row in st.session_state.produtos.iterrows():
+        col1, col2, col3 = st.columns([3, 2, 1])
+        with col1:
+            st.write(f"**{row['Produto']}** – {row['Tempo']}h")
+        with col2:
+            if st.button("Editar", key=f"edit{idx}"):
+                novo_nome = st.text_input("Novo nome", row['Produto'], key=f"novo_nome{idx}")
+                novo_tempo = st.number_input("Novo tempo", 1, 48, row['Tempo'], key=f"novo_tempo{idx}")
+                if st.button("Salvar alterações", key=f"save{idx}"):
+import streamlit as st
+import pandas as pd
+from datetime import datetime, timedelta
+import plotly.express as px
+from fpdf import FPDF
+
+# =========================================
+# CONFIGURAÇÃO DA PÁGINA
+# =========================================
+st.set_page_config(
+    page_title="SAD - Sistema de Apoio à Decisão",
+    layout="wide"
+)
+
+# Paleta de cores azul e vermelha
+PRIMARY_COLOR = "#0A3D91"
+SECOND_COLOR = "#E53935"
+
+st.markdown(
+    f"""
+    <style>
+        .sidebar .sidebar-content {{
+            background-color: {PRIMARY_COLOR};
+        }}
+        .stButton>button {{
+            background-color:{SECOND_COLOR};
+            color: white;
+            font-weight:bold;
+            border-radius:5px;
+        }}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+st.title("📊 SAD Fábrica de Tecidos – Gestão e Priorização")
+
+
+# =========================================
+# SESSION STATES
+# =========================================
+if "produtos" not in st.session_state:
+    st.session_state.produtos = pd.DataFrame(columns=["Produto", "Tempo"])
+
+if "pedidos" not in st.session_state:
+    st.session_state.pedidos = pd.DataFrame(columns=[
+        "Pedido", "Produto", "Urgência", "Custo(R$)", "Tempo Produção",
+        "Pontuação", "Prazo", "Data Entrada", "Data Conclusão", "Status"
+    ])
+
+
+# =========================================
+# FUNÇÃO PARA GERAR PDF
+# =========================================
+def gerar_pdf(pedidos):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", "B", 16)
+
+    hoje = datetime.today().strftime("%d/%m/%Y")
+    pdf.cell(200, 10, txt=f"Ordem de Serviço - {hoje}", ln=True, align="C")
+    pdf.ln(10)
+
+    pdf.set_font("Arial", size=12)
+
+    for _, row in pedidos.iterrows():
+        texto = (
+            f"Pedido: {row['Pedido']} | Produto: {row['Produto']} | "
+            f"Urgência: {row['Urgência']} | Custo: R${row['Custo(R$)']:.2f} | "
+            f"Tempo: {row['Tempo Produção']}h | Prazo: {row['Prazo'].strftime('%d/%m/%Y')}"
+        )
+        pdf.multi_cell(0, 8, txt=texto)
+        pdf.ln(2)
+
+    filename = "ordem_servico.pdf"
+    pdf.output(filename)
+    return filename
+
+
+# =========================================
+# ABAS
+# =========================================
+aba1, aba2, aba3 = st.tabs([
+    "📌 Priorização de Pedidos",
+    "🧵 Cadastro de Produtos",
+    "📈 Gráficos e Indicadores"
+])
+
+
+# ============================================================
+# ██████  ABA 1 – PRIORIZAÇÃO DE PEDIDOS  ██████
+# ============================================================
+with aba1:
+    st.header("📌 Priorização de Pedidos")
+
+    with st.form("novo_pedido"):
+        st.subheader("➕ Adicionar Pedido")
+
+        nome = st.text_input("Nome do Pedido")
+        prazo = st.date_input("Prazo de entrega", datetime.today() + timedelta(days=7))
+
+        if len(st.session_state.produtos) == 0:
+            st.warning("Cadastre produtos na aba **Cadastro de Produtos**.")
+        produto = st.selectbox("Tipo de Produto", st.session_state.produtos["Produto"])
+
+        urgencia = st.slider("Urgência (1 a 10)", 1, 10, 5)
+        custo = st.number_input("Custo (R$ 0 a 2000)", 0, 2000, 500)
+
+        enviar = st.form_submit_button("Adicionar Pedido")
+
+        if enviar and nome:
+            tempo = st.session_state.produtos.loc[
+                st.session_state.produtos["Produto"] == produto, "Tempo"
+            ].iloc[0]
+
+            pontuacao = (urgencia * 0.4) + ((10 - tempo) * 0.3) + ((2000 - custo) / 2000 * 10 * 0.3)
+
+            novo = pd.DataFrame([{
+                "Pedido": nome,
+                "Produto": produto,
+                "Urgência": urgencia,
+                "Custo(R$)": custo,
+                "Tempo Produção": tempo,
+                "Pontuação": pontuacao,
+                "Prazo": prazo,
+                "Data Entrada": datetime.today(),
+                "Data Conclusão": None,
+                "Status": "Aberto"
+            }])
+
+            st.session_state.pedidos = pd.concat([st.session_state.pedidos, novo], ignore_index=True)
+            st.success("Pedido adicionado!")
+
+    # ---------- ORDENAÇÃO ----------
+    pedidos_abertos = st.session_state.pedidos[st.session_state.pedidos["Status"] == "Aberto"]
+    pedidos_abertos = pedidos_abertos.sort_values(by="Pontuação", ascending=False)
+
+    st.subheader("📄 Ordem de Produção")
+    st.dataframe(pedidos_abertos)
+
+    # ---------- MARCAR CONCLUÍDO ----------
+    st.subheader("✔ Marcar como concluído")
+
+    for idx, row in pedidos_abertos.iterrows():
+        if st.checkbox(f"Concluir pedido: {row['Pedido']}", key=f"chk_{idx}"):
+            st.session_state.pedidos.at[idx, "Status"] = "Concluído"
+            st.session_state.pedidos.at[idx, "Data Conclusão"] = datetime.today()
+            st.success(f"Pedido {row['Pedido']} concluído.")
+
+    # ---------- PDF ----------
+    if st.button("📥 Gerar PDF da Ordem de Serviço"):
+        pdf_path = gerar_pdf(pedidos_abertos)
+        with open(pdf_path, "rb") as f:
+            st.download_button("Download do PDF", f, file_name=pdf_path)
+
+
+# ============================================================
+# ██████  ABA 2 – CADASTRO DE PRODUTOS  ██████
+# ============================================================
+with aba2:
+    st.header("🧵 Cadastro de Produtos")
+
+    with st.form("cad_produto"):
+        st.subheader("➕ Adicionar Produto")
+        nome_prod = st.text_input("Nome do Produto")
+        tempo_prod = st.number_input("Tempo médio de produção (horas)", 1, 48, 2)
+
+        add_prod = st.form_submit_button("Salvar")
+
+        if add_prod and nome_prod:
+            novo_prod = pd.DataFrame([{
+                "Produto": nome_prod,
+                "Tempo": tempo_prod
+            }])
+            st.session_state.produtos = pd.concat([st.session_state.produtos, novo_prod], ignore_index=True)
+            st.success("Produto cadastrado!")
+
+    st.subheader("📄 Produtos cadastrados")
+    st.dataframe(st.session_state.produtos)
+
+    # ---------- EDIÇÃO E EXCLUSÃO ----------
+    st.subheader("✏ Editar / 🗑 Excluir Produtos")
+
+    for idx, row in st.session_state.produtos.iterrows():
+        col1, col2, col3 = st.columns([3, 2, 1])
+        with col1:
+            st.write(f"**{row['Produto']}** – {row['Tempo']}h")
+        with col2:
+            if st.button("Editar", key=f"edit{idx}"):
+                novo_nome = st.text_input("Novo nome", row['Produto'], key=f"novo_nome{idx}")
+                novo_tempo = st.number_input("Novo tempo", 1, 48, row['Tempo'], key=f"novo_tempo{idx}")
+                if st.button("Salvar alterações", key=f"save{idx}"):
+                    st.session_state.produtos.at[idx, "Produto"] = novo_nome
+                    st.session_state.produtos.at[idx, "Tempo"] = novo_tempo
+                    st.experimental_rerun()
+        with col3:
+            if st.button("Excluir", key=f"del{idx}"):
+                st.session_state.produtos = st.session_state.produtos.drop(idx).reset_index(drop=True)
+                st.experimental_rerun()
+
+
+
+# ============================================================
+# ██████  ABA 3 – GRÁFICOS  ██████
+# ============================================================
+with aba3:
+    st.header("📈 Gráficos e Indicadores")
+
+    pedidos = st.session_state.pedidos.copy()
+
+    if pedidos.empty:
+        st.info("Nenhum pedido cadastrado ainda.")
+    else:
+        hoje = datetime.today().date()
+        pedidos["Prazo"] = pd.to_datetime(pedidos["Prazo"])
+
+        pedidos["Atrasado"] = (pedidos["Status"] == "Aberto") & (pedidos["Prazo"] < hoje)
+
+        resumo = pd.DataFrame({
+            "Status": ["Abertos", "Atrasados", "Concluídos"],
+            "Quantidade": [
+                sum(pedidos["Status"] == "Aberto"),
+                sum(pedidos["Atrasado"]),
+                sum(pedidos["Status"] == "Concluído"),
+            ]
+        })
+
+        st.subheader("📊 Situação dos Pedidos")
+        fig = px.bar(resumo, x="Status", y="Quantidade", color="Status",
+                     color_discrete_map={
+                         "Abertos": PRIMARY_COLOR,
+                         "Atrasados": SECOND_COLOR,
+                         "Concluídos": "#2E7D32"
+                     })
+        st.plotly_chart(fig)
+
+        # Tempo entre entrada e conclusão
+        concluídos = pedidos[pedidos["Status"] == "Concluído"].copy()
+        if not concluídos.empty:
+            concluídos["Dias"] = (
+                concluídos["Data Conclusão"] - concluídos["Data Entrada"]
+            ).dt.days
+
+            st.subheader("⏱ Tempo total para concluir cada pedido (dias)")
+            fig2 = px.bar(
+                concluídos,
+                x="Pedido",
+                y="Dias",
+                color="Dias",
+                color_continuous_scale="Bluered"
+            )
+            st.plotly_chart(fig2)
