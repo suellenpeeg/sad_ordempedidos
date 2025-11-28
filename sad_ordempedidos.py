@@ -33,7 +33,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("📊 SAD Fábrica de Tecidos – Gestão e Priorização")
+st.title("📊 SAD – Gestão e Priorização")
 
 
 # =========================================
@@ -213,7 +213,7 @@ with aba3:
         st.info("Nenhum pedido cadastrado ainda.")
     else:
         hoje = datetime.today()
-        pedidos["Prazo"] = pd.to_datetime(pedidos["Prazo"])
+        pedidos["Prazo"] = pd.to_datetime(pedidos["Prazo"], errors="coerce")
 
         pedidos["Atrasado"] = (pedidos["Status"] == "Aberto") & (pedidos["Prazo"] < hoje)
 
@@ -237,15 +237,15 @@ with aba3:
 
         # Tempo entre entrada e conclusão
         concluídos = pedidos[pedidos["Status"] == "Concluído"].copy()
-        if not concluídos.empty:
-           # Garantir que ambos são datetime
-        concluídos["Data Entrada"] = pd.to_datetime(concluídos["Data Entrada"], errors="coerce")
-        concluídos["Data Conclusão"] = pd.to_datetime(concluídos["Data Conclusão"], errors="coerce")
 
-        # Agora pode subtrair
-         concluídos["Dias"] = (
-         concluídos["Data Conclusão"] - concluídos["Data Entrada"]
-         ).dt.days
+        if not concluídos.empty:
+            # 🔥 Correção: garantir datetime antes de subtrair
+            concluídos["Data Entrada"] = pd.to_datetime(concluídos["Data Entrada"], errors="coerce")
+            concluídos["Data Conclusão"] = pd.to_datetime(concluídos["Data Conclusão"], errors="coerce")
+
+            concluídos["Dias"] = (
+                concluídos["Data Conclusão"] - concluídos["Data Entrada"]
+            ).dt.days
 
             st.subheader("⏱ Tempo total para concluir cada pedido (dias)")
             fig2 = px.bar(
@@ -256,6 +256,7 @@ with aba3:
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
 
