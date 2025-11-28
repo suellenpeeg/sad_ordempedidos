@@ -3,6 +3,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import plotly.express as px
 from fpdf import FPDF
+import os
 
 # =========================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -12,7 +13,6 @@ st.set_page_config(
     layout="wide"
 )
 
-# Paleta de cores azul e vermelha
 PRIMARY_COLOR = "#0A3D91"
 SECOND_COLOR = "#E53935"
 
@@ -33,16 +33,21 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("📊 SAD – Gestão e Priorização")
-
+st.title("📊 SAD Fábrica de Tecidos – Gestão e Priorização")
 
 # =========================================
-# SESSION STATES
+# CARREGAR DADOS (PERSISTÊNCIA)
 # =========================================
-if "produtos" not in st.session_state:
+if os.path.exists("produtos.csv"):
+    st.session_state.produtos = pd.read_csv("produtos.csv")
+else:
     st.session_state.produtos = pd.DataFrame(columns=["Produto", "Tempo"])
 
-if "pedidos" not in st.session_state:
+if os.path.exists("pedidos.csv"):
+    st.session_state.pedidos = pd.read_csv(
+        "pedidos.csv", parse_dates=["Prazo", "Data Entrada", "Data Conclusão"]
+    )
+else:
     st.session_state.pedidos = pd.DataFrame(columns=[
         "Pedido", "Produto", "Urgência", "Custo(R$)", "Tempo Produção",
         "Pontuação", "Prazo", "Data Entrada", "Data Conclusão", "Status"
@@ -65,7 +70,9 @@ def gerar_pdf(pedidos):
 
     for _, row in pedidos.iterrows():
         texto = (
-            f"Pedido: {row['Pedido']} | Produto: {row['Produto']} | Tempo: {row['Tempo Produção']}h | Prazo: {row['Prazo'].strftime('%d/%m/%Y')}"      
+            f"Pedido: {row['Pedido']} | Produto: {row['Produto']} | "
+            f"Urgência: {row['Urgência']} | Custo: R${row['Custo(R$)']:.2f} | "
+            f"Tempo: {row['Tempo Produção']}h | Prazo: {row['Prazo'].strftime('%d/%m/%Y')}"
         )
         pdf.multi_cell(0, 8, txt=texto)
         pdf.ln(2)
@@ -86,7 +93,7 @@ aba1, aba2, aba3 = st.tabs([
 
 
 # ============================================================
-# ██████  ABA 1 – PRIORIZAÇÃO DE PEDIDOS  ██████
+# ABA 1 – PRIORIZAÇÃO DE PEDIDOS
 # ============================================================
 with aba1:
     st.header("📌 Priorização de Pedidos")
@@ -127,6 +134,7 @@ with aba1:
             }])
 
             st.session_state.pedidos = pd.concat([st.session_state.pedidos, novo], ignore_index=True)
+            st.session_state.pedidos.to_csv("pedidos.csv", index=False)
             st.success("Pedido adicionado!")
 
     # ---------- ORDENAÇÃO ----------
@@ -138,11 +146,11 @@ with aba1:
 
     # ---------- MARCAR CONCLUÍDO ----------
     st.subheader("✔ Marcar como concluído")
-
     for idx, row in pedidos_abertos.iterrows():
         if st.checkbox(f"Concluir pedido: {row['Pedido']}", key=f"chk_{idx}"):
             st.session_state.pedidos.at[idx, "Status"] = "Concluído"
             st.session_state.pedidos.at[idx, "Data Conclusão"] = datetime.today()
+            st.session_state.pedidos.to_csv("pedidos.csv", index=False)
             st.success(f"Pedido {row['Pedido']} concluído.")
 
     # ---------- PDF ----------
@@ -153,7 +161,7 @@ with aba1:
 
 
 # ============================================================
-# ██████  ABA 2 – CADASTRO DE PRODUTOS  ██████
+# ABA 2 – CADASTRO DE PRODUTOS
 # ============================================================
 with aba2:
     st.header("🧵 Cadastro de Produtos")
@@ -171,6 +179,7 @@ with aba2:
                 "Tempo": tempo_prod
             }])
             st.session_state.produtos = pd.concat([st.session_state.produtos, novo_prod], ignore_index=True)
+            st.session_state.produtos.to_csv("produtos.csv", index=False)
             st.success("Produto cadastrado!")
             st.rerun()
 
@@ -179,7 +188,6 @@ with aba2:
 
     # ---------- EDIÇÃO E EXCLUSÃO ----------
     st.subheader("✏ Editar / 🗑 Excluir Produtos")
-
     for idx, row in st.session_state.produtos.iterrows():
         col1, col2, col3 = st.columns([3, 2, 1])
         with col1:
@@ -191,16 +199,17 @@ with aba2:
                 if st.button("Salvar alterações", key=f"save{idx}"):
                     st.session_state.produtos.at[idx, "Produto"] = novo_nome
                     st.session_state.produtos.at[idx, "Tempo"] = novo_tempo
+                    st.session_state.produtos.to_csv("produtos.csv", index=False)
                     st.rerun()
         with col3:
             if st.button("Excluir", key=f"del{idx}"):
                 st.session_state.produtos = st.session_state.produtos.drop(idx).reset_index(drop=True)
+                st.session_state.produtos.to_csv("produtos.csv", index=False)
                 st.rerun()
 
 
-
 # ============================================================
-# ██████  ABA 3 – GRÁFICOS  ██████
+# ABA 3 – GRÁFICOS E INDICADORES
 # ============================================================
 with aba3:
     st.header("📈 Gráficos e Indicadores")
@@ -212,7 +221,6 @@ with aba3:
     else:
         hoje = datetime.today()
         pedidos["Prazo"] = pd.to_datetime(pedidos["Prazo"], errors="coerce")
-
         pedidos["Atrasado"] = (pedidos["Status"] == "Aberto") & (pedidos["Prazo"] < hoje)
 
         resumo = pd.DataFrame({
@@ -233,27 +241,27 @@ with aba3:
                      })
         st.plotly_chart(fig)
 
-        # Tempo entre entrada e conclusão
+        # Tempo entre entrada e conclusão em horas
         concluídos = pedidos[pedidos["Status"] == "Concluído"].copy()
-
         if not concluídos.empty:
-            # 🔥 Correção: garantir datetime antes de subtrair
             concluídos["Data Entrada"] = pd.to_datetime(concluídos["Data Entrada"], errors="coerce")
             concluídos["Data Conclusão"] = pd.to_datetime(concluídos["Data Conclusão"], errors="coerce")
 
-            concluídos["Dias"] = (
+            # 🔥 Tempo em horas
+            concluídos["Horas"] = (
                 concluídos["Data Conclusão"] - concluídos["Data Entrada"]
-            ).dt.days
+            ).dt.total_seconds() / 3600
 
-            st.subheader("⏱ Tempo total para concluir cada pedido (dias)")
+            st.subheader("⏱ Tempo total para concluir cada pedido (horas)")
             fig2 = px.bar(
                 concluídos,
                 x="Pedido",
-                y="Dias",
-                color="Dias",
+                y="Horas",
+                color="Horas",
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
 
