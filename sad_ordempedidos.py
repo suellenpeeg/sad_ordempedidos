@@ -192,11 +192,11 @@ with aba2:
                 if st.button("Salvar alterações", key=f"save{idx}"):
                     st.session_state.produtos.at[idx, "Produto"] = novo_nome
                     st.session_state.produtos.at[idx, "Tempo"] = novo_tempo
-                    st.experimental_rerun()
+                    st.rerun()
         with col3:
             if st.button("Excluir", key=f"del{idx}"):
                 st.session_state.produtos = st.session_state.produtos.drop(idx).reset_index(drop=True)
-                st.experimental_rerun()
+                st.rerun()
 
 
 
@@ -250,5 +250,6 @@ with aba3:
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
