@@ -68,12 +68,18 @@ def gerar_pdf(pedidos):
 
     pdf.set_font("Arial", size=12)
 
+    # Certifique-se que Prazo é datetime
+    pedidos["Prazo"] = pd.to_datetime(pedidos["Prazo"], errors="coerce")
+
     for _, row in pedidos.iterrows():
+        # Evita erro se Prazo for NaT
+        prazo_str = row['Prazo'].strftime('%d/%m/%Y') if pd.notnull(row['Prazo']) else "N/A"
+
         texto = (
-       f"Pedido: {row['Pedido']} | Produto: {row['Produto']} | "
-       f"Urgência: {row['Urgência']} | Custo: R${row['Custo(R$)']:.2f} | "
-       f"Tempo: {row['Tempo Produção']}h | Prazo: {prazo_str}"
-       )
+            f"Pedido: {row['Pedido']} | Produto: {row['Produto']} | "
+            f"Urgência: {row['Urgência']} | Custo: R${row['Custo(R$)']:.2f} | "
+            f"Tempo: {row['Tempo Produção']}h | Prazo: {prazo_str}"
+        )
         pdf.multi_cell(0, 8, txt=texto)
         pdf.ln(2)
 
@@ -261,6 +267,7 @@ with aba3:
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
 
