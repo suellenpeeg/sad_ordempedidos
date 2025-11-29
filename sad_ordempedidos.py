@@ -33,7 +33,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-st.title("📊 SAD Fábrica de Tecidos – Gestão e Priorização")
+st.title("📊 SAD – Gestão e Priorização")
 
 # =========================================
 # CARREGAR DADOS (PERSISTÊNCIA)
@@ -267,6 +267,7 @@ with aba3:
                 color_continuous_scale="Bluered"
             )
             st.plotly_chart(fig2)
+
 
 
 
